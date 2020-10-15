@@ -1,3 +1,6 @@
+# -*- coding=utf-8 -*-
+
+import base64
 import selenium
 from selenium import webdriver
 from selenium.webdriver.support.ui import Select
@@ -9,6 +12,13 @@ import random
 import traceback
 import getpass
 import logging
+import smtplib
+# import json
+import poplib
+from email import parser
+from email.mime.text import MIMEText
+from email.header import Header
+
 log_fmt = "%(asctime)s|%(message)s"
 
 logging.basicConfig(filename='qiandao.log', format=log_fmt,level=logging.INFO)
@@ -16,6 +26,31 @@ logging.basicConfig(filename='qiandao.log', format=log_fmt,level=logging.INFO)
 URL = "https://ehall.jlu.edu.cn/taskcenter/workflow/appall?tags=%E7%A0%94%E7%A9%B6%E7%94%9F%E9%99%A2"
 WAIT = 1
 # 邮箱,密码,专业,年级,校区,宿舍楼,寝室,硕博0/1
+
+def sendEmail(msg_from, msg_to, auth_id, title, content):
+    """发送邮件：目前只支持qq邮箱自动发送邮件
+
+    Args:
+        msg_from ([type]): [description]
+        msg_to ([type]): [description]
+        auth_id ([type]): [description]
+        title ([type]): [description]
+        content ([type]): [description]
+    """
+    msg = MIMEText(content)
+    msg['Subject'] = title
+    msg['From'] = msg_from
+    msg['To'] = msg_to
+    try:
+        s = smtplib.SMTP_SSL("smtp.qq.com",465)
+        s.login(msg_from, auth_id)
+        s.sendmail(msg_from, msg_to, msg.as_string())
+        # print(msg_from, "发送成功")
+    except s.SMTPException:
+        print("发送失败")
+    finally:
+        s.quit()
+
 def sign(sign_time, index, info):
     username = info["username"]
     major = info["major"]
@@ -24,7 +59,10 @@ def sign(sign_time, index, info):
     building = info["building"]
     dormitory = info["dormitory"]
     password = info["password"]
-    type = 0
+    if info["xuewei"] == "硕士":
+        type = 0
+    else:
+        type = 0
     
     chrome_options = webdriver.ChromeOptions()
     chrome_options.add_argument('headless')
@@ -39,26 +77,27 @@ def sign(sign_time, index, info):
     # 用get打开页面
     driver.get(
         "https://ehall.jlu.edu.cn/sso/login?x_started=true&redirect_uri=https%3A%2F%2Fehall.jlu.edu.cn%2Fsso%2Foauth2%2Fauthorize%3Fscope%3Dopenid%26response_type%3Dcode%26redirect_uri%3Dhttps%253A%252F%252Fehall.jlu.edu.cn%252Finfoplus%252Flogin%253FretUrl%253Dhttps%25253A%25252F%25252Fehall.jlu.edu.cn%25252Finfoplus%25252Foauth2%25252Fauthorize%25253Fx_redirected%25253Dtrue%252526scope%25253Dprofile%25252Bprofile_edit%25252Bapp%25252Btask%25252Bprocess%25252Bsubmit%25252Bprocess_edit%25252Btriple%25252Bstats%25252Bsys_profile%25252Bsys_enterprise%25252Bsys_triple%25252Bsys_stats%25252Bsys_entrust%25252Bsys_entrust_edit%252526response_type%25253Dcode%252526redirect_uri%25253Dhttps%2525253A%2525252F%2525252Fehall.jlu.edu.cn%2525252Ftaskcenter%2525252Fwall%2525252Fendpoint%2525253FretUrl%2525253Dhttps%252525253A%252525252F%252525252Fehall.jlu.edu.cn%252525252Ftaskcenter%252525252Fwechat%252525252Fappall%252526client_id%25253D1640e2e4-f213-11e3-815d-fa163e9215bb%26state%3D26dac3%26client_id%3DbwDBpMCWbid5RFcljQRP#/")
-    print("  ", driver.title, driver.current_url)
+    # print("  ", driver.title, driver.current_url)
 
     # 登陆界面
     driver.find_element_by_xpath("//input[@name='username']").clear()
     driver.find_element_by_xpath("//input[@name='username']").send_keys(username)
     driver.find_element_by_xpath("//input[@name='password']").clear()
-    driver.find_element_by_xpath("//input[@name='password']").send_keys(password)
+
+    driver.find_element_by_xpath("//input[@name='password']").send_keys(base64.b64decode(password).decode("utf-8"))
     time.sleep(WAIT)
     driver.find_element_by_xpath("//input[@name='login_submit']").click()
 
-    print('登录完成')
+    # print('登录完成')
 
     # 所有办理事项界面
     time.sleep(WAIT)
-    print("  ", driver.title, driver.current_url)
+    # print("  ", driver.title, driver.current_url)
 
     # 每日健康打卡
     driver.get("https://ehall.jlu.edu.cn/infoplus/form/YJSMRDK/start")
     time.sleep(WAIT)
-    print("  ", driver.title, driver.current_url)
+    # print("  ", driver.title, driver.current_url)
 
     # 循环页面句柄，获取非主页句柄，只适用于2个页面窗口的情况下
     toHandle = driver_.window_handles
@@ -112,19 +151,24 @@ def sign(sign_time, index, info):
     # 获得最终的提示消息
     time.sleep(WAIT)
     warning = driver.find_element_by_xpath("//div[@class='dialog_body']").text
-    print("  ", sign_time, warning)
+    # print("  ", sign_time, warning)
 
     time.sleep(random.random())
     driver.quit()
 
 def signProgram(info):
-    
-    try_num = 100
+    filename = './info.json'
+    with open(filename, 'r') as f:
+        dic = json.load(f)
+    msg_from = dic['msg_from'] #发送方邮箱
+    passwd = dic['passwd']  #填入发送方邮箱的授权码
+    msg_to = info["username"] + dic["msg_to"] #收件人邮箱
+    try_num = 30
     while True:
-        print("---------------------------------------------------")
+        # print("---------------------------------------------------")
         localtime = time.strftime("%Y.%m %H:%M:%S", time.localtime())
         index = -1
-        print(localtime, end="\t")
+        # print(localtime, end="\t")
 
         hour = int(localtime.split(" ")[1].split(":")[0])
         minite = int(localtime.split(" ")[1].split(":")[1])
@@ -142,15 +186,17 @@ def signProgram(info):
             sign_time = "夜签到"
             index = 4
         else:
-            print(60 - minite, "分钟后再次尝试")
+            # print(60 - minite, "分钟后再次尝试")
             time.sleep((60 - minite) * 60)
             continue
-        print(sign_time)
+        # print(sign_time)
 
         try:
             sign(sign_time, index, info)
-            strrrr = f"{info['username']} {sign_time}-签到完毕, "
-            logging.info(strrrr)
+            content = f"{info['username']} {sign_time}-签到完毕"
+            logging.info(content)
+            try_num = 30
+            # sendEmail(msg_from, msg_to, passwd, "自动打卡", content)
             time.sleep((4 * 60 - minite) * 60)
         except Exception:
             try_num -= 1
