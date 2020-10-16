@@ -200,7 +200,7 @@ def signProgram(info):
             time.sleep((4 * 60 - minite) * 60)
         except Exception:
             try_num -= 1
-            print("error")
+            print("error: ", try_num, info['username'])
             print(traceback.format_exc())
             time.sleep(WAIT)
             if try_num <= 0:
